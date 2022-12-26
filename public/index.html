@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title></title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://bootswatch.com/5/solar/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body>
+
+        <div class="container">
+            <h1>Server Events</h1>
+            <ul>
+
+            </ul>
+        </div>
+
+        <script>
+            const source = new EventSource("http://localhost:9000/vehicle-update-events")
+            source.addEventListener("message", (event) => {
+                const data = JSON.parse(event.data)
+                console.log(data)
+                const li = document.createElement("li")
+                li.innerText = `${data.vehicleId} - ${data.available}`
+                document.querySelector("ul").appendChild(li)
+            }, false)
+        </script>
+    
+    </body>
+</html>

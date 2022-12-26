@@ -1,0 +1,88 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+)
+
+var mockVehicleUpdateEvents = []VehicleUpdateEvent{
+	{VehicleID: "1", Available: true},
+	{VehicleID: "2", Available: false},
+	{VehicleID: "1", Available: false},
+	{VehicleID: "2", Available: true},
+	{VehicleID: "2", Available: false},
+	{VehicleID: "3", Available: true},
+}
+
+type VehicleUpdateEvent struct {
+	VehicleID string `json:"vehicleId"`
+	Available bool   `json:"available"`
+}
+
+type client struct {
+	events chan VehicleUpdateEvent
+}
+
+func (c *client) sendEvent(event VehicleUpdateEvent) {
+	fmt.Printf("Adding event to events channel: %v\n", event)
+	c.events <- event
+}
+
+func processEvents(c *client) {
+	fmt.Println("Processing events")
+	for _, event := range mockVehicleUpdateEvents {
+		fmt.Printf("Sending event: %v\n", event)
+
+		c.sendEvent(event)
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func getEventHandler(c *client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Handling request")
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		fmt.Println("Events", len(c.events))
+
+		flusher, ok := w.(http.Flusher)
+
+		if !ok {
+			http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+			return
+		}
+
+		for {
+			b, _ := json.Marshal(<-c.events)
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		}
+	}
+}
+
+func main() {
+	done := make(chan struct{})
+
+	c := &client{
+		events: make(chan VehicleUpdateEvent),
+	}
+
+	r := http.NewServeMux()
+	r.HandleFunc("/vehicle-update-events", getEventHandler(c))
+	r.Handle("/", http.FileServer(http.Dir("./public")))
+
+	go processEvents(c)
+
+	go func() {
+		fmt.Println("Starting server")
+		http.ListenAndServe(":9000", r)
+	}()
+
+	<-done
+}
